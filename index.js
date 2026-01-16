@@ -1,43 +1,39 @@
 require('dotenv').config();
 const { Telegraf, Markup } = require('telegraf');
-
-// 1. Safety Check for Token
-if (!process.env.BOT_TOKEN) {
-    console.error("CRITICAL ERROR: BOT_TOKEN is missing in Railway Variables!");
-    process.exit(1);
-}
+const config = require('./config');
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
 
-// 2. Create the Keyboard
+// Create the Keyboard using the config file
 const mainMenu = Markup.keyboard([
-    ['📦 My Products', '🛒 Post Product'],
-    ['⭐ Preferences', '👤 Account'],
-    ['📞 Contact Us', '📅 Schedule Post'],
-    ['🔍 Browse Products']
+    [config.buttons.myProducts, config.buttons.postProduct],
+    [config.buttons.preferences, config.buttons.account],
+    [config.buttons.contactUs, config.buttons.schedulePost],
+    [config.buttons.browseProducts]
 ]).resize();
 
-// 3. Start Command with your Amharic Text
-bot.start((ctx) => {
-    const userName = ctx.from.first_name || "user";
-    const welcome = `🌟 Hello ${userName}!\n\nየቦቱን አማራጮች እንዴት መጠቀም ይቻላል?\n\n📦 **My Products**\n👉 የእርስዎን ምርቶች ይዩ።\n\n🛒 **Post Product**\n👉 አዲስ ምርት ለመለጠፍ።\n\n📣 Join : @halal_order`;
-    
-    // Using simple reply to avoid Markdown formatting crashes
-    return ctx.reply(welcome, mainMenu);
-});
+// Start Command
+bot.start((ctx) => ctx.reply(config.replies.welcome, mainMenu));
 
-// 4. Basic Listeners
-bot.hears('📦 My Products', (ctx) => ctx.reply('Your products list will appear here.'));
-bot.hears('📞 Contact Us', (ctx) => ctx.reply('Contact us at @halal_order'));
+// --- Button Logic ---
 
-// 5. Launch with Error Catching
-bot.launch()
-    .then(() => console.log("✅ Bot is online and working!"))
-    .catch((err) => {
-        console.error("❌ Failed to connect to Telegram:", err.message);
-        process.exit(1);
-    });
+bot.hears(config.buttons.myProducts, (ctx) => ctx.reply(config.replies.myProducts));
 
-// Handle graceful stops
+bot.hears(config.buttons.postProduct, (ctx) => ctx.reply(config.replies.postProduct));
+
+bot.hears(config.buttons.preferences, (ctx) => ctx.reply(config.replies.preferences));
+
+bot.hears(config.buttons.account, (ctx) => ctx.reply(config.replies.account));
+
+bot.hears(config.buttons.contactUs, (ctx) => ctx.reply(config.replies.contactUs));
+
+bot.hears(config.buttons.schedulePost, (ctx) => ctx.reply(config.replies.schedulePost));
+
+bot.hears(config.buttons.browseProducts, (ctx) => ctx.reply(config.replies.browseProducts));
+
+// Launch the bot
+bot.launch().then(() => console.log("Bot is active with custom buttons!"));
+
+// Graceful stop
 process.once('SIGINT', () => bot.stop('SIGINT'));
 process.once('SIGTERM', () => bot.stop('SIGTERM'));
