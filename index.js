@@ -3,38 +3,59 @@ const { Telegraf, Markup } = require('telegraf');
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
 
-// Main Menu Keyboard
+// --- Custom Keyboard Layout ---
 const mainMenu = Markup.keyboard([
-    ['🚀 My Services', '📞 Contact Support'], // First row
-    ['ℹ️ About Bot', '🌐 Visit Website']      // Second row
-]).resize(); // .resize() makes the buttons fit the screen nicely
+    ['📦 My Products', '🛒 Post Product'],
+    ['⭐ Preferences', '👤 Account'],
+    ['📞 Contact Us', '📅 Schedule Post'],
+    ['🔍 Browse Products']
+]).resize();
 
-// Command: /start
+// --- Start Command ---
 bot.start((ctx) => {
-    ctx.reply('Welcome! Use the menu below to navigate:', mainMenu);
+    const userName = ctx.from.first_name || "user";
+    const welcomeMessage = `🌟 Hello ${userName}!\n\n` +
+        `የቦቱን አማራጮች እንዴት መጠቀም ይቻላል?\n\n` +
+        `📦 **My Products (የእኔ ምርቶች)**\n` +
+        `👉 የእርስዎን ምርቶች ይዩ፣ ፖስት ያድርጉ ወይም ያስወግዱ።\n\n` +
+        `🛒 **Post Product (ምርት ለመለጠፍ)**\n` +
+        `👉 አዲስ ምርት ለመለጠፍ ይህን በተን ይጠቀሙ።\n\n` +
+        `⭐ **Preferences (ምርጫዎች)**\n` +
+        `👉 የሚፈልጉት ምርት ፖስት ሲደረግ ለማወቅ ምርጫዎትን ያስቀምጡ።\n\n` +
+        `👤 **Account (መለያ)**\n` +
+        `👉 የመለያ መረጃዎን ይዩ ወይም ያሻሽሉ።\n\n` +
+        `📞 **Contact Us (አግኙን)**\n` +
+        `👉 ለጥያቄዎች ወይም ድጋፍ ለማገኘት።\n\n` +
+        `📅 **Schedule Post (ምርት ለማስቀመጥ)**\n` +
+        `👉 ምርቶችዎን ለወደፊት በራስ-ሰር ፖስት ለማድረግ ይህን በተን ይጠቀሙ!\n\n` +
+        `🔍 **Browse Products (ምርቶችን ይፈልጉ)**\n` +
+        `👉 የተለያዩ ምርቶችን ይፈልጉ ወይም ወደ አፕ ይሂዱ እና ይግዙ።\n\n` +
+        `📣 Join : @halal_order`;
+
+    ctx.replyWithMarkdown(welcomeMessage, mainMenu);
 });
 
-// Handle button clicks
-bot.hears('🚀 My Services', (ctx) => {
-    ctx.reply('Here are my services: \n1. AI Chat \n2. Data Analysis \n3. Automation');
+// --- Button Handlers ---
+
+bot.hears('📦 My Products', (ctx) => {
+    ctx.reply('እዚህ የእርስዎን ምርቶች ዝርዝር ማየት ይችላሉ። (Feature coming soon)');
 });
 
-bot.hears('📞 Contact Support', (ctx) => {
-    ctx.reply('You can reach support at @YourUsername');
+bot.hears('🛒 Post Product', (ctx) => {
+    ctx.reply('እባክዎ የምርቱን ፎቶ እና ዝርዝር መረጃ ይላኩ።');
 });
 
-bot.hears('ℹ️ About Bot', (ctx) => {
-    ctx.reply('I am a custom bot built with Node.js and hosted on Railway!');
+bot.hears('📞 Contact Us', (ctx) => {
+    ctx.reply('ለድጋፍ @halal_order ያግኙን።');
 });
 
-bot.hears('🌐 Visit Website', (ctx) => {
-    ctx.reply('Visit us at: https://example.com');
+// Add more handlers for the other buttons as you build them...
+
+// --- Launch ---
+bot.launch().then(() => {
+    console.log("E-commerce Bot is live!");
 });
 
-// Launch bot
-bot.launch();
-console.log("Bot updated and listening...");
-
-// Enable graceful stop
+// Graceful stop
 process.once('SIGINT', () => bot.stop('SIGINT'));
 process.once('SIGTERM', () => bot.stop('SIGTERM'));
