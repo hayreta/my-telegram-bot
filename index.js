@@ -1,9 +1,15 @@
 require('dotenv').config();
 const { Telegraf, Markup } = require('telegraf');
 
+// Check if token exists to prevent crash before starting
+if (!process.env.BOT_TOKEN) {
+    console.error("ERROR: BOT_TOKEN is missing in Environment Variables!");
+    process.exit(1);
+}
+
 const bot = new Telegraf(process.env.BOT_TOKEN);
 
-// --- Custom Keyboard Layout ---
+// --- Keyboard Layout ---
 const mainMenu = Markup.keyboard([
     ['📦 My Products', '🛒 Post Product'],
     ['⭐ Preferences', '👤 Account'],
@@ -35,26 +41,19 @@ bot.start((ctx) => {
     ctx.replyWithMarkdown(welcomeMessage, mainMenu);
 });
 
-// --- Button Handlers ---
+// --- Simple Handlers to prevent empty response ---
+bot.hears('📦 My Products', (ctx) => ctx.reply('Feature coming soon!'));
+bot.hears('📞 Contact Us', (ctx) => ctx.reply('Contact us at @halal_order'));
 
-bot.hears('📦 My Products', (ctx) => {
-    ctx.reply('እዚህ የእርስዎን ምርቶች ዝርዝር ማየት ይችላሉ። (Feature coming soon)');
+// --- Error Handling ---
+bot.catch((err, ctx) => {
+    console.log(`Ooops, encountered an error for ${ctx.updateType}`, err);
 });
-
-bot.hears('🛒 Post Product', (ctx) => {
-    ctx.reply('እባክዎ የምርቱን ፎቶ እና ዝርዝር መረጃ ይላኩ።');
-});
-
-bot.hears('📞 Contact Us', (ctx) => {
-    ctx.reply('ለድጋፍ @halal_order ያግኙን።');
-});
-
-// Add more handlers for the other buttons as you build them...
 
 // --- Launch ---
-bot.launch().then(() => {
-    console.log("E-commerce Bot is live!");
-});
+bot.launch()
+    .then(() => console.log("Bot is running successfully on Railway!"))
+    .catch((err) => console.error("Failed to launch bot:", err));
 
 // Graceful stop
 process.once('SIGINT', () => bot.stop('SIGINT'));
