@@ -3,10 +3,11 @@ const { Telegraf, Markup, session } = require('telegraf');
 const config = require('./config');
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
+
+// Using session to remember the user's progress and phone number
 bot.use(session());
 
-// Global Styles
-const divider = '───────────────────';
+const divider = '━━━━━━━━━━━━━━';
 const mainMenu = Markup.keyboard([
     [config.buttons.myProducts, config.buttons.addProduct],
     [config.buttons.preferences, config.buttons.account],
@@ -16,21 +17,28 @@ const mainMenu = Markup.keyboard([
 
 const navKeyboard = Markup.keyboard([[config.buttons.back, config.buttons.cancel]]).resize();
 
-bot.start((ctx) => ctx.reply('🌟 በዛህራ ሳፋ መገበያያ ቦት እንኳን ደህና መጡ!', mainMenu));
-
-// --- 🛒 Add Product Flow ---
-bot.hears(config.buttons.addProduct, (ctx) => {
-    // Keep the phone number but reset other fields
-    const savedPhone = ctx.session?.phone; 
-    ctx.session = { state: 'WAITING_NAME', phone: savedPhone };
-    ctx.reply('✍🏻 <b>የምርትዎን ስም</b> ያስገቡ (ግልፅ ይሁን)።', { parse_mode: 'HTML', ...Markup.keyboard([[config.buttons.cancel]]).resize() });
+// --- Start ---
+bot.start((ctx) => {
+    ctx.reply('🌟 እንኳን ወደ ዛህራ ሳፋ መገበያያ ቦት በሰላም መጡ!', mainMenu);
 });
 
+// --- Start Add Product ---
+bot.hears(config.buttons.addProduct, (ctx) => {
+    // We preserve ctx.session.phone if it exists from a previous post
+    const phone = ctx.session?.phone;
+    ctx.session = { state: 'WAITING_NAME', phone: phone };
+    ctx.reply('✍🏻 <b>የምርትዎን ስም</b> ያስገቡ (ግልፅ ይሁን)።', { 
+        parse_mode: 'HTML', 
+        ...Markup.keyboard([[config.buttons.cancel]]).resize() 
+    });
+});
+
+// --- Action Handlers (Inline) ---
 bot.action(/^cat_(.+)$/, async (ctx) => {
     ctx.session.category = ctx.match[1];
     ctx.session.state = 'WAITING_SUB';
     const subs = config.subCategories[ctx.session.category] || [[{ text: 'General', callback_data: 'sub_General' }]];
-    await ctx.editMessageText(`📂 <b>Sub Category</b> ይምረጡ:\n${divider}\nCategory: ${ctx.session.category}`, 
+    await ctx.editMessageText(`📂 <b>Sub Category</b> ይምረጡ:\nSelected: ${ctx.session.category}`, 
         { parse_mode: 'HTML', ...Markup.inlineKeyboard(subs) });
 });
 
@@ -41,6 +49,38 @@ bot.action(/^sub_(.+)$/, async (ctx) => {
     ctx.reply('📷 <b>ፎቶ:</b> የምርትዎን ጥራት ያለው ፎቶ ያስገቡ።', { parse_mode: 'HTML', ...navKeyboard });
 });
 
+// --- Post Timing Actions ---
+bot.action('post_now', async (ctx) => {
+    const { name, category, subCategory, photoId, desc, price, phone } = ctx.session;
+    const user = ctx.from.username ? `@${ctx.from.username}` : ctx.from.first_name;
+
+    const caption = `🛍 <b>${name}</b>\n\n` +
+                    `📝 <i>${desc}</i>\n` +
+                    `${divider}\n` +
+                    `📂 #${category} | #${subCategory}\n` +
+                    `💰 <b>Price:</b> ${price} ETB\n` +
+                    `📞 <b>Contact:</b> ${phone}\n` +
+                    `👤 <b>Seller:</b> ${user}\n` +
+                    `${divider}\n` +
+                    `🛒 Shop: @hayre37`;
+
+    try {
+        await ctx.telegram.sendPhoto(config.channelId, photoId, { caption, parse_mode: 'HTML' });
+        await ctx.editMessageText('✅ ምርትዎ በተሳካ ሁኔታ ተለጥፏል!');
+        ctx.reply('ወደ ዋናው ማውጫ ተመልሰናል::', mainMenu);
+    } catch (e) {
+        ctx.reply('❌ ስህተት ተፈጥሯል (ቦቱ በቻናሉ ላይ Admin መሆኑን ያረጋግጡ)');
+    }
+    ctx.session.state = null; // Clear state but keep phone in session
+});
+
+bot.action('post_schedule', (ctx) => {
+    ctx.editMessageText('📅 ቀጠሮ ተይዟል! በቅርቡ በቻናሉ ላይ ይለጠፋል።');
+    ctx.session.state = null;
+    ctx.reply('ወደ ዋናው ማውጫ...', mainMenu);
+});
+
+// --- Message Handlers ---
 bot.on('message', async (ctx) => {
     if (!ctx.session) return;
     const text = ctx.message.text;
@@ -50,89 +90,60 @@ bot.on('message', async (ctx) => {
         return ctx.reply('❌ ተሰርዟል።', mainMenu);
     }
 
-    // Step Logic
     switch (ctx.session.state) {
         case 'WAITING_NAME':
             ctx.session.name = text;
             ctx.session.state = 'WAITING_CATEGORY';
-            await ctx.reply('መመሪያዎችን በመከተል ይቀጥሉ...', navKeyboard);
+            await ctx.reply('ምድብ ይምረጡ...', navKeyboard);
             return ctx.reply('📂 <b>Main Category</b> ይምረጡ:', Markup.inlineKeyboard(config.categories));
 
         case 'WAITING_IMAGE':
-            if (!ctx.message.photo) return ctx.reply('❌ እባክዎ ፎቶ ይላኩ።');
+            if (!ctx.message.photo) return ctx.reply('❌ እባክዎ የምስል ፋይል (Photo) ይላኩ።');
             ctx.session.photoId = ctx.message.photo[ctx.message.photo.length - 1].file_id;
             ctx.session.state = 'WAITING_DESC';
-            ctx.reply('✍️ <b>ዝርዝር:</b> ስለ ምርቱ ማብራሪያ ይጻፉ።', { parse_mode: 'HTML' });
+            ctx.reply('✍️ <b>ዝርዝር:</b> ስለ ምርቱ ማብራሪያ ይጻፉ (ፎቶ አይፈቀድም)።', { parse_mode: 'HTML' });
             break;
 
         case 'WAITING_DESC':
-            if (ctx.message.photo) return ctx.reply('❌ ጽሁፍ ብቻ ያስገቡ።');
+            if (ctx.message.photo) return ctx.reply('❌ እባክዎ ጽሁፍ ብቻ ያስገቡ።');
             ctx.session.desc = text;
             ctx.session.state = 'WAITING_PRICE';
             ctx.reply('💵 <b>ዋጋ:</b> የምርቱን ዋጋ ያስገቡ።', { parse_mode: 'HTML' });
             break;
 
         case 'WAITING_PRICE':
-            if (isNaN(text)) return ctx.reply('❌ ዋጋ በቁጥር ብቻ!');
+            if (isNaN(text)) return ctx.reply('❌ እባክዎ ዋጋውን በቁጥር ብቻ ያስገቡ።');
             ctx.session.price = text;
 
-            // CHECK IF PHONE EXISTS
+            // Check if we already have the phone number
             if (ctx.session.phone) {
                 ctx.session.state = 'WAITING_SCHEDULE';
                 return ctx.reply('📅 <b>መቼ ይለጠፍ?</b>', Markup.inlineKeyboard([
                     [{ text: '🚀 አሁኑኑ (Post Now)', callback_data: 'post_now' }],
-                    [{ text: '📅 ቀጠሮ ያዝ (Schedule)', callback_data: 'post_schedule' }]
+                    [{ text: '📅 ቀጠሮ (Schedule)', callback_data: 'post_schedule' }]
                 ]));
             } else {
                 ctx.session.state = 'WAITING_CONTACT';
-                return ctx.reply('📱 ለጥያቄ እንዲመች <b>ስልክ ቁጥርዎን</b> አንድ ጊዜ ያጋሩን።', 
+                return ctx.reply('📱 ለጥያቄ እንዲመች <b>ስልክ ቁጥርዎን</b> ያጋሩ (አንድ ጊዜ ብቻ)።', 
                     Markup.keyboard([[Markup.button.contactRequest(config.buttons.shareContact)], [config.buttons.cancel]]).resize());
             }
     }
 });
 
-// --- Handle Contact (Save for future) ---
+// --- Contact Handler ---
 bot.on('contact', async (ctx) => {
     if (ctx.session?.state === 'WAITING_CONTACT') {
         ctx.session.phone = ctx.message.contact.phone_number;
         ctx.session.state = 'WAITING_SCHEDULE';
-        ctx.reply('✅ ስልክ ቁጥርዎ ተመዝግቧል።\n📅 <b>መቼ ይለጠፍ?</b>', 
-            { parse_mode: 'HTML', ...Markup.inlineKeyboard([
+        ctx.reply('✅ ተመዝግቧል! 📅 <b>መቼ ይለጠፍ?</b>', {
+            parse_mode: 'HTML',
+            ...Markup.inlineKeyboard([
                 [{ text: '🚀 አሁኑኑ (Post Now)', callback_data: 'post_now' }],
-                [{ text: '📅 ቀጠሮ ያዝ (Schedule)', callback_data: 'post_schedule' }]
-            ])});
+                [{ text: '📅 ቀጠሮ (Schedule)', callback_data: 'post_schedule' }]
+            ])
+        });
     }
 });
 
-// --- Final Posting Logic ---
-bot.action('post_now', async (ctx) => {
-    const { name, category, subCategory, photoId, desc, price, phone } = ctx.session;
-    const username = ctx.from.username ? `@${ctx.from.username}` : 'User';
+bot.launch().then(() => console.log("✅ Beautiful Bot is Online!"));
 
-    const caption = `<b>🛍 ${name}</b>\n\n` +
-                    `📝 ${desc}\n` +
-                    `${divider}\n` +
-                    `📂 <b>Category:</b> #${category}\n` +
-                    `💰 <b>Price:</b> ${price} ETB\n` +
-                    `👤 <b>Seller:</b> ${username}\n` +
-                    `📞 <b>Phone:</b> ${phone}\n` +
-                    `${divider}\n` +
-                    `🛒 Shop More: @hayre37`;
-
-    try {
-        await ctx.telegram.sendPhoto(config.channelId, photoId, { caption, parse_mode: 'HTML' });
-        await ctx.editMessageText('✅ ምርትዎ በተሳካ ሁኔታ ተለጥፏል!');
-        ctx.reply('ወደ ዋናው ማውጫ ተመልሰናል::', mainMenu);
-    } catch (e) {
-        ctx.reply('❌ ስህተት ተፈጥሯል (Bot Admin መሆኑን ያረጋግጡ)');
-    }
-    // Note: We don't clear ctx.session entirely so we keep the phone number
-    ctx.session.state = null;
-});
-
-bot.action('post_schedule', (ctx) => {
-    ctx.editMessageText('📅 ቀጠሮው ተመዝግቧል። አስተዳዳሪው ሲያረጋግጡት ይለጠፋል።\n(Note: This feature will be fully active once we add a database!)');
-    ctx.reply('Main Menu', mainMenu);
-});
-
-bot.launch();
