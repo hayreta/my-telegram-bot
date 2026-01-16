@@ -12,32 +12,42 @@ const mainMenu = Markup.keyboard([
     [config.buttons.browseProducts]
 ]).resize();
 
+// Helper to delete the inline menu if it exists
+const cleanMenu = async (ctx) => {
+    if (ctx.session?.menuId) {
+        try {
+            await ctx.telegram.deleteMessage(ctx.chat.id, ctx.session.menuId);
+            ctx.session.menuId = null;
+        } catch (e) { /* ignore error if already deleted */ }
+    }
+};
+
 bot.start((ctx) => {
     ctx.session = null;
     ctx.reply('🌟 Hello! Welcome to Zahara Safa.', mainMenu);
 });
 
-// --- Start Flow ---
-bot.hears(config.buttons.addProduct, (ctx) => {
+bot.hears(config.buttons.addProduct, async (ctx) => {
     ctx.session = { state: 'WAITING_NAME' };
-    ctx.reply('✍🏻 የምርትዎን ስም ያስገቡ (ግልፅ ይሁን)።', Markup.keyboard([[config.buttons.cancel]]).resize());
+    await ctx.reply('✍🏻 የምርትዎን ስም ያስገቡ (ግልፅ ይሁን)።', Markup.keyboard([[config.buttons.cancel]]).resize());
 });
 
-// --- Inline Navigation ---
-bot.action('cancel_flow', (ctx) => {
+// --- Inline Navigation (with cleaning) ---
+bot.action('cancel_flow', async (ctx) => {
     ctx.session = null;
-    ctx.editMessageText('❌ Post Cancelled.');
-    ctx.reply('Main Menu', mainMenu);
+    await ctx.deleteMessage(); // Remove the inline menu
+    ctx.reply('❌ Post Cancelled.', mainMenu);
 });
 
 bot.action('back_to_name', async (ctx) => {
     ctx.session.state = 'WAITING_NAME';
     await ctx.deleteMessage();
-    ctx.reply('✍🏻 የምርትዎን ስም ያስገቡ (ግልፅ ይሁን)።', Markup.keyboard([[config.buttons.cancel]]).resize());
+    ctx.reply('✍🏻 የምርትዎን ስም ያስገቡ (ግልፅ ይሁን)።');
 });
 
 bot.action('back_to_cat', async (ctx) => {
     ctx.session.state = 'WAITING_CATEGORY';
+    // Edit existing message instead of sending new one
     await ctx.editMessageText(`📂 Main Category: ይምረጡ።`, Markup.inlineKeyboard(config.categories));
 });
 
@@ -52,53 +62,47 @@ bot.action(/^cat_(.+)$/, async (ctx) => {
 bot.action(/^sub_(.+)$/, async (ctx) => {
     ctx.session.subCategory = ctx.match[1];
     ctx.session.state = 'WAITING_IMAGE';
-    await ctx.deleteMessage();
+    await ctx.deleteMessage(); // THIS REMOVES THE INLINE BUTTONS
     ctx.reply('📷 Image: የምርትዎን የሽፋን ፎቶ ያስገቡ።', Markup.keyboard([[config.buttons.back, config.buttons.cancel]]).resize());
 });
 
 // --- Message Handlers ---
 bot.on('message', async (ctx) => {
     if (!ctx.session) return;
-    const state = ctx.session.state;
+    
+    // If the user types anything while an inline menu is open, delete the menu
+    await cleanMenu(ctx);
 
-    // Handle Back/Cancel from Keyboard
-    if (ctx.message.text === config.buttons.cancel) {
+    const state = ctx.session.state;
+    const text = ctx.message.text;
+
+    if (text === config.buttons.cancel) {
         ctx.session = null;
         return ctx.reply('❌ Cancelled.', mainMenu);
     }
-    if (ctx.message.text === config.buttons.back) {
-        // Logic to go back one step based on current state
-        if (state === 'WAITING_IMAGE') {
-            ctx.session.state = 'WAITING_CATEGORY';
-            return ctx.reply('📂 Main Category:', Markup.inlineKeyboard(config.categories));
-        }
-    }
 
-    // Step Logic
     if (state === 'WAITING_NAME') {
-        ctx.session.name = ctx.message.text;
+        ctx.session.name = text;
         ctx.session.state = 'WAITING_CATEGORY';
-        // Remove keyboard when showing inline categories
-        ctx.reply('📂 Main Category: ይምረጡ።', Markup.inlineKeyboard(config.categories));
+        // Save the message ID of the inline menu
+        const sentMsg = await ctx.reply('📂 Main Category: ይምረጡ።', Markup.inlineKeyboard(config.categories));
+        ctx.session.menuId = sentMsg.message_id;
     } 
     else if (state === 'WAITING_IMAGE') {
         if (!ctx.message.photo) return ctx.reply('❌ እባክዎ ፎቶ ብቻ ይላኩ።');
         ctx.session.photoId = ctx.message.photo[ctx.message.photo.length - 1].file_id;
         ctx.session.state = 'WAITING_DESC';
-        ctx.reply('✍️ Description: ስለ ምርትዎ ተጨማሪ መረጃ ይስጡ።\n\n⚠️ ፎቶ ወይም ሊንክ አይፈቀድም!', Markup.keyboard([[config.buttons.cancel]]).resize());
+        ctx.reply('✍️ Description: ስለ ምርትዎ ተጨማሪ መረጃ ይስጡ።\n\n⚠️ ፎቶ አይፈቀድም!');
     } 
     else if (state === 'WAITING_DESC') {
-        // STRICT CHECK: Reject if user sends photo instead of text
-        if (ctx.message.photo || ctx.message.document) {
-            return ctx.reply('❌ እባክዎ የምርት ማብራሪያውን በፅሁፍ (Text) ብቻ ይላኩ። ፎቶ አይፈቀድም!');
-        }
-        ctx.session.desc = ctx.message.text;
+        if (ctx.message.photo) return ctx.reply('❌ Description በፅሁፍ ብቻ ይላኩ!');
+        ctx.session.desc = text;
         ctx.session.state = 'WAITING_PRICE';
-        ctx.reply('💵 Price: የምርትዎን ዋጋ ያስገቡ (በቁጥር ብቻ)።');
+        ctx.reply('💵 Price: የምርትዎን ዋጋ ያስገቡ።');
     } 
     else if (state === 'WAITING_PRICE') {
-        if (isNaN(ctx.message.text)) return ctx.reply('❌ እባክዎ ዋጋውን በቁጥር ብቻ ያስገቡ (ለምሳሌ: 1500)');
-        ctx.session.price = ctx.message.text;
+        if (isNaN(text)) return ctx.reply('❌ ዋጋውን በቁጥር ብቻ ያስገቡ።');
+        ctx.session.price = text;
         ctx.session.state = 'WAITING_CONTACT';
         ctx.reply('📱 ስልክ ቁጥርዎን ያጋሩ።', Markup.keyboard([[Markup.button.contactRequest(config.buttons.shareContact)], [config.buttons.cancel]]).resize());
     }
