@@ -6,6 +6,8 @@ const bot = new Telegraf(process.env.BOT_TOKEN);
 bot.use(session());
 
 const divider = '━━━━━━━━━━━━━━━━━━━━';
+
+// Keyboards
 const mainMenu = Markup.keyboard([
     [config.buttons.myProducts, config.buttons.addProduct],
     [config.buttons.preferences, config.buttons.account],
@@ -13,105 +15,95 @@ const mainMenu = Markup.keyboard([
     [config.buttons.browseProducts]
 ]).resize();
 
-const navKeyboard = Markup.keyboard([[config.buttons.back, config.buttons.cancel]]).resize();
+const navKeyboard = Markup.keyboard([[config.buttons.cancel]]).resize();
 
-// --- 🌟 Start ---
+// --- START ---
 bot.start((ctx) => {
-    ctx.reply('🌟 <b>እንኳን ወደ ዛህራ ሳፋ መገበያያ ቦት በሰላም መጡ!</b>\n\nእባክዎ ከታች ካሉት አማራጮች አንዱን ይምረጡ።', { 
-        parse_mode: 'HTML', 
-        ...mainMenu 
-    });
+    ctx.session = { phone: ctx.session?.phone }; // Reset flow but keep phone
+    ctx.reply('🌟 <b>እንኳን ወደ ዛህራ ሳፋ መገበያያ ቦት በሰላም መጡ!</b>', { parse_mode: 'HTML', ...mainMenu });
 });
 
-// --- 🛒 Add Product Entry ---
+// --- ADD PRODUCT INITIATION ---
 bot.hears(config.buttons.addProduct, (ctx) => {
-    const savedPhone = ctx.session?.phone;
-    ctx.session = { state: 'WAITING_NAME', phone: savedPhone };
-    ctx.reply('✍🏻 <b>የምርትዎን ስም ያስገቡ:</b>\n<i>ለምሳሌ: iPhone 15 Pro Max</i>', { 
-        parse_mode: 'HTML', 
-        ...Markup.keyboard([[config.buttons.cancel]]).resize() 
-    });
+    ctx.session.state = 'WAITING_NAME';
+    ctx.reply('✍🏻 <b>የምርትዎን ስም ያስገቡ:</b>', { parse_mode: 'HTML', ...navKeyboard });
 });
 
-// --- ⚙️ State Handlers ---
+// --- MAIN MESSAGE HANDLER ---
 bot.on('message', async (ctx) => {
-    if (!ctx.session) return;
+    if (!ctx.session || !ctx.session.state) return;
     const text = ctx.message.text;
 
     if (text === config.buttons.cancel) {
-        ctx.session = null;
-        return ctx.reply('❌ ፖስቱ ተሰርዟል።', mainMenu);
-    }
-
-    // Global Back Logic
-    if (text === config.buttons.back) {
-        // Logic to rewind states can be added here
-        return ctx.reply('ወደ ኋላ ተመልሰናል::');
+        ctx.session.state = null;
+        return ctx.reply('❌ ተሰርዟል::', mainMenu);
     }
 
     switch (ctx.session.state) {
         case 'WAITING_NAME':
             ctx.session.name = text;
             ctx.session.state = 'WAITING_CATEGORY';
-            await ctx.reply('ቀጣዩን ደረጃ ይምረጡ...', navKeyboard);
             return ctx.reply('📂 <b>Main Category:</b> ይምረጡ', { 
                 parse_mode: 'HTML', 
                 ...Markup.inlineKeyboard(config.categories) 
             });
 
         case 'WAITING_IMAGE':
-            if (!ctx.message.photo) return ctx.reply('❌ እባክዎ ፎቶ (Image) ብቻ ይላኩ።');
+            if (!ctx.message.photo) return ctx.reply('❌ እባክዎ ፎቶ ብቻ ይላኩ::');
             ctx.session.photoId = ctx.message.photo[ctx.message.photo.length - 1].file_id;
             ctx.session.state = 'WAITING_DESC';
-            ctx.reply('✍️ <b>ዝርዝር መግለጫ:</b> ስለ ምርቱ ተጨማሪ መረጃ ይጻፉ (ፎቶ አይፈቀድም)።', { parse_mode: 'HTML' });
-            break;
+            return ctx.reply('✍️ <b>ዝርዝር መግለጫ:</b> ስለ ምርቱ ይጻፉ (ፎቶ አይፈቀድም):', { parse_mode: 'HTML' });
 
         case 'WAITING_DESC':
-            if (ctx.message.photo) return ctx.reply('❌ መግለጫው በጽሁፍ ብቻ መሆን አለበት።');
+            if (ctx.message.photo) return ctx.reply('❌ እባክዎ ጽሁፍ ብቻ ያስገቡ::');
             ctx.session.desc = text;
             ctx.session.state = 'WAITING_PRICE';
-            ctx.reply('💵 <b>ዋጋ:</b> የምርቱን ዋጋ ያስገቡ (በቁጥር ብቻ)።', { parse_mode: 'HTML' });
-            break;
+            return ctx.reply('💵 <b>ዋጋ:</b> በቁጥር ብቻ ያስገቡ:', { parse_mode: 'HTML' });
 
         case 'WAITING_PRICE':
-            if (isNaN(text)) return ctx.reply('❌ እባክዎ ዋጋውን በቁጥር ብቻ ያስገቡ (ለምሳሌ: 5000)።');
+            if (isNaN(text)) return ctx.reply('❌ እባክዎ ዋጋውን በቁጥር ብቻ ያስገቡ::');
             ctx.session.price = text;
-
+            
             if (ctx.session.phone) {
-                return showSchedulingOptions(ctx);
+                return finishToAdmin(ctx);
             } else {
                 ctx.session.state = 'WAITING_CONTACT';
-                return ctx.reply('📱 <b>ስልክ ቁጥር:</b> ለመጀመሪያ ጊዜ ስልክ ቁጥርዎን ያጋሩን።', { 
-                    parse_mode: 'HTML', 
-                    ...Markup.keyboard([[Markup.button.contactRequest(config.buttons.shareContact)], [config.buttons.cancel]]).resize() 
-                });
+                return ctx.reply('📱 <b>ስልክ ቁጥር:</b> ለመጀመሪያ ጊዜ ስልክ ቁጥርዎን ያጋሩን::', 
+                    Markup.keyboard([[Markup.button.contactRequest(config.buttons.shareContact)], [config.buttons.cancel]]).resize());
             }
     }
 });
 
-// --- 📞 Contact Handling ---
+// --- CONTACT HANDLER ---
 bot.on('contact', async (ctx) => {
     if (ctx.session?.state === 'WAITING_CONTACT') {
         ctx.session.phone = ctx.message.contact.phone_number;
-        return showSchedulingOptions(ctx);
+        return finishToAdmin(ctx);
     }
 });
 
-// --- 📅 Scheduling Helper ---
-function showSchedulingOptions(ctx) {
-    ctx.session.state = 'WAITING_APPROVAL';
-    return ctx.reply('📅 <b>የማረጋገጫ ደረጃ:</b>\nምርቱ እንዲለጠፍ ወደ አስተዳዳሪ መላክ ይፈልጋሉ?', {
-        parse_mode: 'HTML',
-        ...Markup.inlineKeyboard([
-            [{ text: '🚀 ለግምገማ ላክ (Send for Review)', callback_data: 'post_for_review' }],
-            [{ text: '❌ ሰርዝ (Cancel)', callback_data: 'cancel_flow' }]
-        ])
+// --- INLINE ACTION HANDLERS ---
+bot.action(/^cat_(.+)$/, async (ctx) => {
+    const category = ctx.match[1];
+    ctx.session.category = category;
+    ctx.session.state = 'WAITING_SUB';
+    const subs = config.subCategories[category] || [[{ text: 'General', callback_data: 'sub_General' }]];
+    await ctx.editMessageText(`📂 <b>Sub Category</b> ይምረጡ:\nMain: ${category}`, { 
+        parse_mode: 'HTML', 
+        ...Markup.inlineKeyboard(subs) 
     });
-}
+});
 
-// --- 👑 Admin Approval Logic ---
-bot.action('post_for_review', async (ctx) => {
-    const { name, category, photoId, desc, price, phone } = ctx.session;
+bot.action(/^sub_(.+)$/, async (ctx) => {
+    ctx.session.subCategory = ctx.match[1];
+    ctx.session.state = 'WAITING_IMAGE';
+    await ctx.deleteMessage();
+    ctx.reply('📷 <b>ፎቶ ያስገቡ:</b>', navKeyboard);
+});
+
+// --- ADMIN REVIEW FUNCTION ---
+async function finishToAdmin(ctx) {
+    const { name, category, subCategory, photoId, desc, price, phone } = ctx.session;
     const user = ctx.from.username ? `@${ctx.from.username}` : ctx.from.first_name;
 
     const adminCaption = `🔍 <b>አዲስ ምርት ለግምገማ</b>\n${divider}\n` +
@@ -120,8 +112,9 @@ bot.action('post_for_review', async (ctx) => {
                          `💰 <b>Price:</b> ${price} ETB\n` +
                          `📞 <b>Phone:</b> ${phone}\n` +
                          `👤 <b>User:</b> ${user}\n` +
-                         `📂 <b>Cat:</b> #${category}`;
+                         `📂 <b>Cat:</b> #${category} | #${subCategory}`;
 
+    // Send to Admin
     await ctx.telegram.sendPhoto(config.adminId, photoId, {
         caption: adminCaption,
         parse_mode: 'HTML',
@@ -131,50 +124,29 @@ bot.action('post_for_review', async (ctx) => {
         ])
     });
 
-    await ctx.editMessageText('⏳ <b>ተልኳል!</b>\nምርትዎ ለአስተዳዳሪ ተልኳል። ሲፈቀድ በቻናሉ ላይ ይለጠፋል።');
-    ctx.reply('ወደ ዋናው ማውጫ...', mainMenu);
-});
+    ctx.session.state = null;
+    await ctx.reply('⏳ <b>ተልኳል!</b> ምርትዎ ለአስተዳዳሪ ተልኳል። ሲፈቀድ ይለጠፋል።', mainMenu);
+}
 
+// --- ADMIN ACTIONS ---
 bot.action(/^approve_(\d+)$/, async (ctx) => {
-    if (ctx.from.id !== config.adminId) return ctx.answerCbQuery("ፍቃድ የሎትም!");
-    
+    if (ctx.from.id !== config.adminId) return ctx.answerCbQuery("Denied!");
     const userId = ctx.match[1];
     const originalCaption = ctx.callbackQuery.message.caption;
-    const cleanCaption = originalCaption.replace('🔍 አዲስ ምርት ለግምገማ', '🛍 <b>አዲስ ምርት</b>') + `\n${divider}\n🛒 @hayre37`;
+    const channelCaption = originalCaption.replace('🔍 አዲስ ምርት ለግምገማ', '🛍 <b>አዲስ ምርት</b>') + `\n${divider}\n🛒 @hayre37`;
     const photoId = ctx.callbackQuery.message.photo[ctx.callbackQuery.message.photo.length - 1].file_id;
 
-    await ctx.telegram.sendPhoto(config.channelId, photoId, { caption: cleanCaption, parse_mode: 'HTML' });
-    await ctx.editMessageCaption('✅ <b>ተፈቅዷል:</b> ምርቱ በቻናሉ ላይ ተለጥፏል።', { parse_mode: 'HTML' });
-    await bot.telegram.sendMessage(userId, "🎉 <b>እንኳን ደስ አለዎት!</b> ምርትዎ በአስተዳዳሪ ተፈቅዶ በቻናሉ ላይ ተለጥፏል።");
+    await ctx.telegram.sendPhoto(config.channelId, photoId, { caption: channelCaption, parse_mode: 'HTML' });
+    await ctx.editMessageCaption('✅ <b>ተፈቅዷል:</b> በቻናሉ ላይ ተለጥፏል።');
+    await bot.telegram.sendMessage(userId, "🎉 <b>እንኳን ደስ አለዎት!</b> ምርትዎ ተፈቅዶ በቻናሉ ላይ ተለጥፏል።");
 });
 
 bot.action(/^reject_(\d+)$/, async (ctx) => {
-    if (ctx.from.id !== config.adminId) return ctx.answerCbQuery("ፍቃድ የሎትም!");
+    if (ctx.from.id !== config.adminId) return ctx.answerCbQuery("Denied!");
     const userId = ctx.match[1];
-    await ctx.editMessageCaption('❌ <b>ውድቅ ተደርጓል:</b> ምርቱ አልተለጠፈም።', { parse_mode: 'HTML' });
+    await ctx.editMessageCaption('❌ <b>ውድቅ ተደርጓል::</b>');
     await bot.telegram.sendMessage(userId, "❌ <b>ይቅርታ:</b> ያስገቡት ምርት በአስተዳዳሪው ተቀባይነት አላገኘም።");
 });
 
-// --- 📂 Inline Category Listeners ---
-bot.action(/^cat_(.+)$/, async (ctx) => {
-    ctx.session.category = ctx.match[1];
-    ctx.session.state = 'WAITING_SUB';
-    const subs = config.subCategories[ctx.session.category] || [[{ text: 'General', callback_data: 'sub_General' }]];
-    await ctx.editMessageText(`📂 <b>Sub Category</b> ይምረጡ:\nMain: ${ctx.session.category}`, 
-        { parse_mode: 'HTML', ...Markup.inlineKeyboard(subs) });
-});
-
-bot.action(/^sub_(.+)$/, async (ctx) => {
-    ctx.session.subCategory = ctx.match[1];
-    ctx.session.state = 'WAITING_IMAGE';
-    await ctx.deleteMessage();
-    ctx.reply('📷 <b>ፎቶ ያስገቡ:</b>\nእባክዎ ጥራት ያለው 1 ምስል ይላኩ።', { parse_mode: 'HTML', ...navKeyboard });
-});
-
-bot.action('cancel_flow', async (ctx) => {
-    ctx.session = null;
-    await ctx.deleteMessage();
-    ctx.reply('❌ ተሰርዟል።', mainMenu);
-});
-
-bot.launch().then(() => console.log("✅ Advanced Marketplace Bot is Live!"));
+bot.catch((err) => console.error("Global Error:", err));
+bot.launch().then(() => console.log("✅ Stable Bot Online!"));
