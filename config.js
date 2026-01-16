@@ -1,5 +1,6 @@
 module.exports = {
     channelId: '@hayre37', 
+    adminId: 5522724001, 
     buttons: {
         myProducts: '📦 My Products',
         addProduct: '🛒 add Product',
