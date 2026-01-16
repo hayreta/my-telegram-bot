@@ -12,18 +12,16 @@ module.exports = {
         cancel: '❌ Cancel',
         shareContact: '📱 Share Your Contact'
     },
-    // Only Category options here now
     categories: [
         [{ text: '🎧 Electronics', callback_data: 'cat_Electronics' }, { text: '👗 Fashion', callback_data: 'cat_Fashion' }],
         [{ text: '💄 Health & Beauty', callback_data: 'cat_Health' }, { text: '🎁 Gifts', callback_data: 'cat_Gifts' }],
         [{ text: '🛋 Home & Living', callback_data: 'cat_Home' }, { text: '👶 Baby & Kids', callback_data: 'cat_Baby' }],
-        [{ text: '💍 Jewelry & Watches', callback_data: 'cat_Jewelry' }, { text: '🏠 Property', callback_data: 'cat_Property' }],
-        [{ text: '🚗 Vehicles', callback_data: 'cat_Vehicles' }, { text: '🌐 Services', callback_data: 'cat_Services' }]
+        [{ text: '🏠 Property', callback_data: 'cat_Property' }, { text: '🚗 Vehicles', callback_data: 'cat_Vehicles' }]
     ],
     subCategories: {
         'Electronics': [
-            [{ text: '⚡️ Accessories', callback_data: 'sub_Accessories' }, { text: '💡 Smart Devices', callback_data: 'sub_Smart' }],
-            [{ text: '📱 Smartphones', callback_data: 'sub_Phones' }, { text: '💻 Laptops', callback_data: 'sub_Laptops' }]
+            [{ text: '⚡️ Accessories', callback_data: 'sub_Accessories' }, { text: '📱 Smartphones', callback_data: 'sub_Phones' }],
+            [{ text: '💻 Laptops', callback_data: 'sub_Laptops' }, { text: '📷 Cameras', callback_data: 'sub_Cameras' }]
         ]
     }
 };
