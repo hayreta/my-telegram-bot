@@ -1,5 +1,5 @@
 module.exports = {
-    channelId: '@hayre37', // Your target channel
+    channelId: '@hayre37', // Make sure your bot is an Admin in this channel
     buttons: {
         myProducts: '📦 My Products',
         addProduct: '🛒 add Product',
@@ -11,7 +11,12 @@ module.exports = {
         back: '⬅️ Back',
         cancel: '❌ Cancel'
     },
-    categories: ['💄 Health & Beauty', '🎁 Gifts', '🛋 Home & Living', '👶 Baby & Kids', '🎧 Electronics', '🏠 Property'],
+    categories: [
+        '💄 Health & Beauty', '🎁 Gifts', 
+        '🛋 Home & Living', '👶 Baby & Kids', 
+        '🎧 Electronics', '🏠 Property',
+        '🚗 Vehicles', '🌐 Services'
+    ],
     subCategories: {
         '🎧 Electronics': ['⚡️ Accessories', '💡 Smart Devices', '🖥 Desktops', '📱 Smartphones']
     }
